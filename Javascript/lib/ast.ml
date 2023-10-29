@@ -23,7 +23,6 @@ type expression =
   | Const of typename
   | Var of string
   | FunctionCall of string * expression list
-  | DebugExp of expression list
 [@@deriving eq, show {with_path = false}]
 
 type var_init =
@@ -49,6 +48,5 @@ and statement =
   | If of expression * statement * statement option
   | Return of expression
   | EmptyStm
-  | DebugStm of string
   | Programm of statement list
 [@@deriving eq, show { with_path = false }]

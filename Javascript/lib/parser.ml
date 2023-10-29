@@ -6,8 +6,6 @@ open Ast
 
 type error = [ `ParsingError of string ]
 
-let chars2string chars = List.fold_left (fun a b -> a ^ Char.escaped b) "" chars
-
 let nothing = return ()
 
 let is_space = function 
@@ -130,7 +128,6 @@ let parse_number =
   lift3 (fun a b c -> a^b^c) (take_while is_digit) (string ".") (take_while is_digit) 
   <|> take_while1 is_digit >>= (function |"." -> fail "incorrect number" | _ as num -> return num)
   >>| (fun n -> number @@ float_of_string n)
-(*TODO: -,NaN..., BigINT*)
 
 let valid_identifier =
   token @@ lift2 (^) 
@@ -139,7 +136,6 @@ let valid_identifier =
     lift2 (^) (satisfy is_valid_identifier_ch >>| Char.escaped) self <|> return "") <?> "invalid chars of var name")
   >>= fun name -> 
     if is_keyword name then fail "name of keyword shouldn't be a keyword" else return name
-  (*TODO: Error, Here is some problem with it*)
 
 
 let bop op first second = BinOp(op, first, second)
@@ -171,11 +167,9 @@ let parse_list_of_mini_expressions parsed_list =
       | Some op -> analize_bin_op ops head ((bop op a c) :: tail)
       | None -> analize_bin_op ops (head @ [a]) (b :: c :: tail))
     | _ as a -> head @ a in
-    (*TODO: think how to replace @ operator and mb rewrite all expr parser*)
   match for_every_op analize_bin_op parsed_list with
   | [a] -> a
   | _ -> assert false
-(*TODO: error*)
 
 let rec parse_arguments = fun () ->
   parens(sep_by (token_str ",") (parse_expression ())) <?> "incorrect function arguments"
@@ -190,7 +184,6 @@ and parse_expression = fun () ->
       valid_identifier >>| var
     ])) >>| parse_list_of_mini_expressions)
    <?> "incorrect expression"
-(*TODO: correct next statement recognise and stop ("let a = 3 + 4 \n 5 + 6") (scan?) (I've tried and failed)*)
   
 let var_parser (init_word: string) = 
   valid_identifier
@@ -205,7 +198,6 @@ let var_parser (init_word: string) =
       value = expr;
     })
   )  
-(*TODO: var support*)
 
 let parse_return =
   token @@ parse_expression () >>| (fun c -> Return c) <* to_end_of_stm
@@ -244,8 +236,6 @@ and parse_stm = fun () ->
       | "return" -> token @@ parse_return <?> "wrong return statement"
       | _ -> parse_empty_stm <?> "incorrect statement"
     ) 
-    (* <|> (many any_char >>| (fun a -> DebugStm (chars2string a)))  *)
-    (* For Debug *)
      <* empty)
 
 and parse_statements stopper =
