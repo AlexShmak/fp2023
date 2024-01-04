@@ -89,6 +89,7 @@ let cur_parens p = between p lc rc
 let sq_parens p = between p ls rs
 let empty_stm = empty *> end_of_input <|> skip is_end
 let to_end_of_stm = empty_stm <|> empty
+let space_both_sides p = spaces *> p <* spaces
 let some n = Some n
 let number n = Number n
 let const c = Const c
@@ -171,17 +172,20 @@ and bop_parser = function
   | a :: b -> chainl1 (bop_parser b) (op_parse a)
   | _ -> mini_expression_parser ()
 
-and array_parser () = token @@ sq_parens (sep_by (char ',') (expression_parser ()))
+and array_parser () =
+  token @@ sq_parens (sep_by (char ',') (space_both_sides (expression_parser ())))
+  <?> "incorrect array expression"
 
 and mini_expression_parser () =
   token
     (choice
-       [ parens @@ expression_parser ()
-       ; lift2 fun_call valid_identifier (parse_arguments ())
-       ; parse_number >>| const
-       ; parse_str >>| const
-       ; valid_identifier >>| var
-       ; array_parser () >>| array_list
+       [
+         parens @@ expression_parser ();
+         lift2 fun_call valid_identifier (parse_arguments ());
+         parse_number >>| const;
+         parse_str >>| const;
+         valid_identifier >>| var;
+         array_parser () >>| array_list;
        ])
   <?> "invalid part of expression"
 
@@ -226,20 +230,18 @@ and parse_block_or_stm () =
   >>| fun stms -> Block stms
 
 and while_parser () =
-  token @@ parens (expression_parser ())
-  >>= fun condition ->
-  parse_block_or_stm ()
-  <?> "invalid while loop body"
-  <|> return (Block [])
-  >>| fun body -> While (condition, body)
+  token @@ parens (expression_parser ()) <?> "invalid while loop condition" >>= fun condition ->
+  parse_block_or_stm () <?> "invalid while loop body" >>| fun body ->
+  While (condition, body)
 
 and for_parser () =
-  token @@ parens (expression_parser ())
-  >>= fun condition ->
-  parse_block_or_stm ()
-  <?> "invalid for loop body"
-  <|> return (Block [])
-  >>| fun body -> For (condition, body)
+  let parse_for_loop_condition () =
+    parens (sep_by (char ';') (space_both_sides (expression_parser ())))
+    <?> "invalid for loop condition"
+  in
+  let parse_for_loop_body () = parse_block_or_stm () <?> "invalid for loop body" in
+  parse_for_loop_condition ()
+  >>= fun condition -> parse_for_loop_body () >>| fun body -> For (condition, body)
 
 and if_parser () =
   token @@ parens (expression_parser ())
@@ -264,7 +266,8 @@ and parse_stm () =
                token1 @@ var_parser word <?> "wrong var statement"
              | "function" -> token1 @@ func_parser () <?> "wrong function statement"
              | "if" -> token1 @@ if_parser () <?> "wrong if statement"
-             | "while" -> token1 @@ while_parser () <?> "wrong while loop statement"
+             | "while" ->
+                 token1 @@ while_parser () <?> "wrong while loop statement"
              | "for" -> token1 @@ for_parser () <?> "wrong for loop statement"
              | "return" -> token parse_return <?> "wrong return statement"
              | "" ->
