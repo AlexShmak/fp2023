@@ -95,7 +95,6 @@ let number n = Number n
 let const c = Const c
 let var v = Var v
 let expression e = Expression e
-let fun_call name args = FunctionCall (name, args)
 let array_list array = Array_list array
 
 let parse_number =
@@ -140,17 +139,25 @@ let valid_identifier =
   else return name
 ;;
 
-(*TODO: Error, Here is some problem with it*)
+let parse_empty_stms = many empty_stm
 
-let bop op first second = BinOp (op, first, second)
-let uop op = UnrecognizedOp op
+let parse_args_names =
+  parens (sep_by (token_str ",") valid_identifier) <?> "incorrect function arguments"
+;;
+
+(*----------unary operators----------*)
+
+let pre_un_op = [ "+", Plus; "-", Minus ] (*precedence 14*)
+
+(*----------bin operators----------*)
+
 let mul_div_rem_op = [ "*", Mul; "/", Div ] (*precedence 12*)
 let add_sub_op = [ "+", Add; "-", Sub ] (*precedence 11*)
 let equality_op = [ "==", Equal; "!=", NotEqual ] (*precedence 8*)
 let list_of_bops = [ equality_op; add_sub_op; mul_div_rem_op ]
 (*from lower to greater precedence*)
 
-let op_parse ops = choice (List.map (fun (js_op, op) -> string js_op *> return op) ops)
+let parse_op ops = choice (List.map (fun (js_op, op) -> string js_op *> return op) ops)
 
 let chainl1 parser op =
   let rec go acc =
@@ -164,87 +171,101 @@ let chainl1 parser op =
   parser >>= fun init -> go init
 ;;
 
+(*----------expression parsers----------*)
+
 let rec parse_arguments () =
-  parens (sep_by (token_str ",") (expression_parser ()))
+  parens (sep_by (token_str ",") (start_parse_expression ()))
   <?> "incorrect function arguments"
 
-and bop_parser = function
-  | a :: b -> chainl1 (bop_parser b) (op_parse a)
-  | _ -> mini_expression_parser ()
+and parse_arrow_func () =
+  token parse_args_names
+  >>= fun args ->
+  token_str "=>"
+  *> token
+       (cur_parens (many @@ parse_stm ())
+        >>| (fun stms -> Block stms)
+        <|> (start_parse_expression () >>| fun exp -> Block [ Return exp ]))
+  >>| fun body -> AnonFunction (args, body)
+
+and parse_anon_func () =
+  token_str "function" *> token parse_args_names
+  >>= fun args ->
+  parse_block_or_stm () <* to_end_of_stm >>| fun body -> AnonFunction (args, body)
+
+and parse_func_call () =
+  lift2
+    (fun f args -> FunctionCall (f, args))
+    (choice
+       [ valid_identifier >>| var
+       ; parse_anon_func ()
+       ; parens @@ start_parse_expression ()
+       ])
+    (parse_arguments ())
+
+and parse_bop = function
+  | a :: b -> chainl1 (parse_bop b) (parse_op a)
+  | _ -> parse_pre_uop ()
+
+and parse_pre_uop () =
+  token @@ parse_op pre_un_op
+  >>| (fun op -> Some op)
+  <|> return None
+  >>= function
+  | Some op -> parse_pre_uop () >>| fun ex -> UnOp (op, ex)
+  | _ -> parse_mini_expression ()
 
 and array_parser () =
-  token @@ sq_parens (sep_by (char ',') (space_both_sides (expression_parser ())))
+  token @@ sq_parens (sep_by (char ',') (space_both_sides (start_parse_expression ())))
   <?> "incorrect array expression"
 
-and mini_expression_parser () =
+and parse_mini_expression () =
   token
     (choice
-       [
-         parens @@ expression_parser ();
-         lift2 fun_call valid_identifier (parse_arguments ());
-         parse_number >>| const;
-         parse_str >>| const;
-         valid_identifier >>| var;
-         array_parser () >>| array_list;
+       [ parse_arrow_func ()
+       ; parse_func_call ()
+       ; parens @@ start_parse_expression ()
+       ; parse_anon_func ()
+       ; parse_number >>| const
+       ; parse_str >>| const
+       ; valid_identifier >>| var
+       ; array_parser () >>| array_list
        ])
   <?> "invalid part of expression"
 
-and expression_parser () =
-  fix (fun _ -> bop_parser list_of_bops) <?> "incorrect expression"
-;;
+and start_parse_expression () =
+  fix (fun _ -> parse_bop list_of_bops <* empty) <?> "incorrect expression"
 
-let parse_return = token @@ expression_parser () >>| (fun c -> Return c) <* to_end_of_stm
-let parse_empty_stms = many empty_stm
+(*----------statement parsers----------*)
 
-let rec func_parser () =
-  token valid_identifier
+and parse_return () = start_parse_expression () >>| (fun c -> Return c) <* to_end_of_stm
+
+and parse_func () =
+  valid_identifier
   >>= fun name ->
-  token @@ parse_arguments ()
+  token parse_args_names
   >>= fun arguments ->
   parse_block_or_stm ()
   <* to_end_of_stm
   >>| fun body -> FunDeck { fun_identifier = name; arguments; body }
 
-and var_parser (init_word : string) =
+and parse_var (init_word : string) =
   valid_identifier
   >>= fun identifier ->
-  token_str "="
-  *> (token @@ (string "function" *> token (parse_arguments ()))
-      >>= (fun arguments ->
-            parse_block_or_stm ()
-            <* to_end_of_stm
-            >>| fun body -> FunDeck { fun_identifier = identifier; arguments; body })
-      <|> (expression_parser ()
-           <* to_end_of_stm
-           >>| some
-           <|> to_end_of_stm *> return None
-           <?> "incorrect definition"
-           >>| fun expr ->
-           VarDeck
-             { var_identifier = identifier; is_const = init_word = "const"; value = expr }
-          ))
+  option false (token_str "=" *> return true)
+  >>= (function
+         | true -> start_parse_expression () >>| some
+         | _ -> return None)
+  <* to_end_of_stm
+  >>| fun expr ->
+  VarDeck { var_identifier = identifier; is_const = init_word = "const"; value = expr }
 
 and parse_block_or_stm () =
   cur_parens (many @@ parse_stm ())
   <|> (parse_stm () >>| fun stm -> [ stm ])
   >>| fun stms -> Block stms
 
-and while_parser () =
-  token @@ parens (expression_parser ()) <?> "invalid while loop condition" >>= fun condition ->
-  parse_block_or_stm () <?> "invalid while loop body" >>| fun body ->
-  While (condition, body)
-
-and for_parser () =
-  let parse_for_loop_condition () =
-    parens (sep_by (char ';') (space_both_sides (expression_parser ())))
-    <?> "invalid for loop condition"
-  in
-  let parse_for_loop_body () = parse_block_or_stm () <?> "invalid for loop body" in
-  parse_for_loop_condition ()
-  >>= fun condition -> parse_for_loop_body () >>| fun body -> For (condition, body)
-
-and if_parser () =
-  token @@ parens (expression_parser ())
+and parse_if () =
+  parens (start_parse_expression ())
   >>= fun condition ->
   parse_block_or_stm ()
   <?> "invalid then statement"
@@ -254,22 +275,38 @@ and if_parser () =
   <|> return (Block [])
   >>| fun else_stm -> If (condition, then_stm, else_stm)
 
+and parse_while () =
+  token @@ parens (start_parse_expression ())
+  <?> "invalid while loop condition"
+  >>= fun condition ->
+  parse_block_or_stm ()
+  <?> "invalid while loop body"
+  >>| fun body -> While (condition, body)
+
+and parse_for () =
+  let parse_for_loop_condition () =
+    parens (sep_by (char ';') (space_both_sides (start_parse_expression ())))
+    <?> "invalid for loop condition"
+  in
+  let parse_for_loop_body () = parse_block_or_stm () <?> "invalid for loop body" in
+  parse_for_loop_condition ()
+  >>= fun condition -> parse_for_loop_body () >>| fun body -> For (condition, body)
+
 and parse_stm () =
   parse_empty_stms
   *> token
-       (expression_parser ()
+       (start_parse_expression ()
         >>| expression
         <|> (read_word
              >>= fun word ->
              match word with
              | "let" | "const" | "var" ->
-               token1 @@ var_parser word <?> "wrong var statement"
-             | "function" -> token1 @@ func_parser () <?> "wrong function statement"
-             | "if" -> token1 @@ if_parser () <?> "wrong if statement"
-             | "while" ->
-                 token1 @@ while_parser () <?> "wrong while loop statement"
-             | "for" -> token1 @@ for_parser () <?> "wrong for loop statement"
-             | "return" -> token parse_return <?> "wrong return statement"
+               token1 @@ parse_var word <?> "wrong var statement"
+             | "function" -> token1 @@ parse_func () <?> "wrong function statement"
+             | "if" -> token1 @@ parse_if () <?> "wrong if statement"
+             | "return" -> token (parse_return ()) <?> "wrong return statement"
+             | "while" -> token1 @@ parse_while () <?> "wrong while statement"
+             | "for" -> token1 @@ parse_for () <?> "wrong for statement"
              | "" ->
                peek_char_fail
                >>= fun ch ->
@@ -291,5 +328,5 @@ let parse_str ?(parser = parse_programm) str =
 let parse str = parse_str ~parser:parse_programm str
 
 let parse_expression str =
-  parse_str ~parser:(expression_parser () >>| fun e -> Expression e) str
+  parse_str ~parser:(start_parse_expression () >>| fun e -> Expression e) str
 ;;

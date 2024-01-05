@@ -2,6 +2,11 @@
 
 (** SPDX-License-Identifier: LGPL-3.0-or-later *)
 
+type un_op =
+  | Plus
+  | Minus
+[@@deriving eq, show { with_path = false }]
+
 type bin_op =
   | Add
   | Sub
@@ -17,16 +22,18 @@ type typename =
 [@@deriving eq, show { with_path = false }]
 
 type expression =
+  | UnOp of un_op * expression
   | BinOp of bin_op * expression * expression
   | UnrecognizedOp of bin_op
   | Parens of expression
   | Const of typename
   | Var of string
   | Array_list of expression list
-  | FunctionCall of string * expression list
+  | FunctionCall of expression * expression list
+  | AnonFunction of string list * statement
 [@@deriving eq, show { with_path = false }]
 
-type var_init =
+and var_init =
   { var_identifier : string
   ; is_const : bool
   ; value : expression option
@@ -34,7 +41,7 @@ type var_init =
 
 and fun_init =
   { fun_identifier : string
-  ; arguments : expression list
+  ; arguments : string list
   ; body : statement
   }
 
@@ -44,7 +51,7 @@ and statement =
   | VarDeck of var_init
   | FunDeck of fun_init
   | While of expression * statement
-  | For of expression * statement
+  | For of expression list * statement
   | If of expression * statement * statement
   | Return of expression
   | Programm of statement list
