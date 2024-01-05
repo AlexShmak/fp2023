@@ -848,10 +848,9 @@ let%expect_test "array_list" =
    [(VarDeck
        { var_identifier = "myArray"; is_const = false;
          value =
-         (Some (Array_list
-                  [(Const (Number 1.)); (Const (Number 2.));
-                    (Const (Number 3.)); (Const (Number 4.));
-                    (Const (Number 5.))]))
+         (Array_list
+            [(Const (Number 1.)); (Const (Number 2.)); (Const (Number 3.)); 
+              (Const (Number 4.)); (Const (Number 5.))])
          })
      ])
     |}]
@@ -877,15 +876,13 @@ let%expect_test "while" =
        (Block
           [(VarDeck
               { var_identifier = "b"; is_const = false; 
-                value = (Some (BinOp (Sub, (Var "a"), (Const (Number 1.)))))
-                }); 
+                value = (BinOp (Sub, (Var "a"), (Const (Number 1.)))) }); 
             (If ((BinOp (Equal, (Var "a"), (Const (Number 1.)))), 
                (Block [(Return (Var "b"))]), 
                (Block [(Return (Const (Number 0.)))]))); 
             (VarDeck
                { var_identifier = "a"; is_const = false; 
-                 value = (Some (BinOp (Sub, (Var "a"), (Const (Number 1.)))))
-                 })
+                 value = (BinOp (Sub, (Var "a"), (Const (Number 1.)))) })
             ])
        ))
      ])

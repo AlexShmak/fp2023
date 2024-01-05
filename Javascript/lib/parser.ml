@@ -332,6 +332,23 @@ and parse_if () =
   <|> return (Block [])
   >>| fun else_stm -> If (condition, then_stm, else_stm)
 
+and parse_while () =
+  token @@ parens (start_parse_expression ())
+  <?> "invalid while loop condition"
+  >>= fun condition ->
+  parse_block_or_stm ()
+  <?> "invalid while loop body"
+  >>| fun body -> While (condition, body)
+
+and parse_for () =
+  let parse_for_loop_condition () =
+    parens (sep_by (char ';') (spaces_both_sides (start_parse_expression ())))
+    <?> "invalid for loop condition"
+  in
+  let parse_for_loop_body () = parse_block_or_stm () <?> "invalid for loop body" in
+  parse_for_loop_condition ()
+  >>= fun condition -> parse_for_loop_body () >>| fun body -> For (condition, body)
+
 and parse_stm () =
   parse_empty_stms
   *> token
@@ -345,6 +362,8 @@ and parse_stm () =
              | "function" -> token1 @@ parse_func () <?> "wrong function statement"
              | "if" -> token1 @@ parse_if () <?> "wrong if statement"
              | "return" -> token1 @@ parse_return () <?> "wrong return statement"
+             | "while" -> token1 @@ parse_while () <?> "wrong while statement"
+             | "for" -> token1 @@ parse_for () <?> "wrong for statement"
              | "" ->
                peek_char_fail
                >>= fun ch ->
