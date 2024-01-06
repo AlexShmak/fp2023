@@ -175,10 +175,11 @@ let parse_args_names =
 ;;
 
 let parse_comma parser = sep_by (token_ch ',') parser <* (token_ch ',' <|> return ' ')
+let parse_semi_colon parser = sep_by (token_ch ';') parser <* (token_ch ';' <|> return ' ')
 let parse_op ops = choice (List.map (fun (js_op, op) -> string js_op *> return op) ops)
 
 (*----------unary operators----------*)
-
+let parse_comma parser = sep_by (token_ch ',') parser <* (token_ch ',' <|> return ' ')
 let pre_un_op = [ "+", Plus; "-", Minus ] (*precedence 14*)
 
 (*----------bin operators----------*)
@@ -217,8 +218,7 @@ let rec parse_arrow_func () =
 
 and parse_anon_func () =
   token_str "function" *> token parse_args_names
-  >>= fun args ->
-  parse_block_or_stm () <* to_end_of_stm >>| fun body -> AnonFunction (args, body)
+  >>= fun args -> parse_block_or_stm () >>| fun body -> AnonFunction (args, body)
 
 and parse_object_deck () =
   cur_parens
@@ -236,7 +236,6 @@ and parse_object_deck () =
          token parse_args_names
          >>= fun arguments ->
          parse_block_or_stm ()
-         <* to_end_of_stm
          >>| fun body -> const (String name), AnonFunction (arguments, body))))
   >>| fun properties -> ObjectDef properties
 
@@ -294,16 +293,14 @@ and start_parse_expression () =
 
 (*----------statement parsers----------*)
 
-and parse_return () = start_parse_expression () >>| (fun c -> Return c) <* to_end_of_stm
+and parse_return () = start_parse_expression () >>| fun c -> Return c
 
 and parse_func () =
   valid_identifier
   >>= fun name ->
   token parse_args_names
   >>= fun arguments ->
-  parse_block_or_stm ()
-  <* to_end_of_stm
-  >>| fun body -> FunDeck { fun_identifier = name; arguments; body }
+  parse_block_or_stm () >>| fun body -> FunDeck { fun_identifier = name; arguments; body }
 
 and parse_var (init_word : string) =
   valid_identifier
@@ -312,7 +309,6 @@ and parse_var (init_word : string) =
   >>= (function
          | true -> start_parse_expression ()
          | _ -> return (Const Undefined))
-  <* to_end_of_stm
   >>| fun expr ->
   VarDeck { var_identifier = identifier; is_const = init_word = "const"; value = expr }
 
@@ -340,14 +336,12 @@ and parse_while () =
   <?> "invalid while loop body"
   >>| fun body -> While (condition, body)
 
-and parse_for () =
-  let parse_for_loop_condition () =
-    parens (sep_by (char ';') (spaces_both_sides (start_parse_expression ())))
-    <?> "invalid for loop condition"
-  in
-  let parse_for_loop_body () = parse_block_or_stm () <?> "invalid for loop body" in
-  parse_for_loop_condition ()
-  >>= fun condition -> parse_for_loop_body () >>| fun body -> For (condition, body)
+(* and parse_for () =
+  token @@ parens (sep_by (token_str ";") (parse_stm ())) 
+  <?> "invalid for loop condition"
+  >>= fun condition -> 
+    parse_block_or_stm ()
+  >>| fun body -> For (condition, body) *)
 
 and parse_stm () =
   parse_empty_stms
@@ -363,13 +357,13 @@ and parse_stm () =
              | "if" -> token1 @@ parse_if () <?> "wrong if statement"
              | "return" -> token1 @@ parse_return () <?> "wrong return statement"
              | "while" -> token1 @@ parse_while () <?> "wrong while statement"
-             | "for" -> token1 @@ parse_for () <?> "wrong for statement"
+             (* | "for" -> token1 @@ parse_for () <?> "wrong for statement" *)
              | "" ->
                peek_char_fail
                >>= fun ch ->
                fail @@ "there is unexpected symbol: '" ^ Char.escaped ch ^ "'"
              | _ -> fail @@ "there is an invalid keyword: \"" ^ word ^ "\""))
-  <* empty
+  <* to_end_of_stm
   <?> "incorrect statement"
 
 and parse_statements stopper = many_till (parse_stm ()) stopper

@@ -56,7 +56,7 @@ and statement =
   | VarDeck of var_init
   | FunDeck of fun_init
   | While of expression * statement
-  | For of expression list * statement
+  | For of statement list * statement
   | If of expression * statement * statement
   | Return of expression
   | Programm of statement list
