@@ -530,9 +530,9 @@ let rec ctx_not_change_bop ctx op a b =
   | BitwiseAnd -> bop_with_int ( land ) <?> "error in bitwise and"
   | BitwiseOr -> bop_with_int ( lor ) <?> "error in bitwise or"
   | LogicalAnd -> logical_and () <?> "error in logical_and operator"
-  | LogicalOr -> logical_or () <?> "error in logical_and operator"
+  | LogicalOr -> logical_or () <?> "error in logical_or operator"
   | NullishCoal -> nullish_coal () <?> "error in nullish_coalescing operator"
-  | Xor -> bop_with_int ( lxor )
+  | Xor -> bop_with_int ( lxor ) <?> "error in xor operator"
   | Exp -> bop_with_num ( ** ) <?> "error in exp operator"
   | _ as a -> ensup @@ asprintf "operator %a not supported yet" pp_bin_op a
 ;;
@@ -698,21 +698,42 @@ and ctx_change_bop ctx op a b =
   let add_ctx = add_ctx ctx in
   match op with
   | Assign -> assign () <?> "error in assignment"
-  | AddAssign -> ctx_change_bop ctx Assign a (BinOp (Add, a, b))
-  | SubAssign -> ctx_change_bop ctx Assign a (BinOp (Sub, a, b))
-  | MulAssign -> ctx_change_bop ctx Assign a (BinOp (Mul, a, b))
-  | DivAssign -> ctx_change_bop ctx Assign a (BinOp (Div, a, b))
-  | ExpAssign -> ctx_change_bop ctx Assign a (BinOp (Exp, a, b))
-  | RemAssign -> ctx_change_bop ctx Assign a (BinOp (Rem, a, b))
-  | LShiftAssign -> ctx_change_bop ctx Assign a (BinOp (LogicalShiftLeft, a, b))
-  | RShiftAssign -> ctx_change_bop ctx Assign a (BinOp (LogicalShiftRight, a, b))
-  | URShiftAssign -> ctx_change_bop ctx Assign a (BinOp (UnsignedShiftRight, a, b))
-  | BitAndAssign -> ctx_change_bop ctx Assign a (BinOp (BitwiseAnd, a, b))
-  | BitOrAssign -> ctx_change_bop ctx Assign a (BinOp (BitwiseOr, a, b))
-  | BitXorAssign -> ctx_change_bop ctx Assign a (BinOp (Xor, a, b))
-  | LogAndAssign -> ctx_change_bop ctx Assign a (BinOp (LogicalAnd, a, b))
-  | LogOrAssign -> ctx_change_bop ctx Assign a (BinOp (LogicalOr, a, b))
-  | NullAssign -> ctx_change_bop ctx Assign a (BinOp (NullishCoal, a, b))
+  | AddAssign ->
+    ctx_change_bop ctx Assign a (BinOp (Add, a, b)) <?> "error in add_assignment"
+  | SubAssign ->
+    ctx_change_bop ctx Assign a (BinOp (Sub, a, b)) <?> "error in sub_assignment"
+  | MulAssign ->
+    ctx_change_bop ctx Assign a (BinOp (Mul, a, b)) <?> "error in mul_assignment"
+  | DivAssign ->
+    ctx_change_bop ctx Assign a (BinOp (Div, a, b)) <?> "error in div_assignment"
+  | ExpAssign ->
+    ctx_change_bop ctx Assign a (BinOp (Exp, a, b)) <?> "error in exp_assignment"
+  | RemAssign ->
+    ctx_change_bop ctx Assign a (BinOp (Rem, a, b)) <?> "error in rem_assignment"
+  | LShiftAssign ->
+    ctx_change_bop ctx Assign a (BinOp (LogicalShiftLeft, a, b))
+    <?> "error in lshift_assignment"
+  | RShiftAssign ->
+    ctx_change_bop ctx Assign a (BinOp (LogicalShiftRight, a, b))
+    <?> "error in rshift_assignment"
+  | URShiftAssign ->
+    ctx_change_bop ctx Assign a (BinOp (UnsignedShiftRight, a, b))
+    <?> "error in u_rightshift_assignment"
+  | BitAndAssign ->
+    ctx_change_bop ctx Assign a (BinOp (BitwiseAnd, a, b))
+    <?> "error in bit_and_assignment"
+  | BitOrAssign ->
+    ctx_change_bop ctx Assign a (BinOp (BitwiseOr, a, b)) <?> "error in bit_or_assignment"
+  | BitXorAssign ->
+    ctx_change_bop ctx Assign a (BinOp (Xor, a, b)) <?> "error in bit_xor_assignment"
+  | LogAndAssign ->
+    ctx_change_bop ctx Assign a (BinOp (LogicalAnd, a, b))
+    <?> "error in log_and_assignment"
+  | LogOrAssign ->
+    ctx_change_bop ctx Assign a (BinOp (LogicalOr, a, b)) <?> "error in log_or_assignment"
+  | NullAssign ->
+    ctx_change_bop ctx Assign a (BinOp (NullishCoal, a, b))
+    <?> "error in null_coal_assignment"
   | PropAccs -> prop_accs () <?> "error in property access"
   | _ ->
     both_ext eval_exp ctx a b
