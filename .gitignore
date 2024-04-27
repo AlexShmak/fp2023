@@ -1,5 +1,6 @@
-# Mac
-.DS_Store
-
-# vscode
-.vscode/
+_build
+_coverage
+/_esy
+/node_modules
+/esy.lock
+/.melange.eobjs
