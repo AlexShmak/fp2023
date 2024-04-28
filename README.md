@@ -12,5 +12,3 @@ Features done (append only):
 - Interpreter for Javascript
 - Parser for Javascript
 - Arrays, Objects, Functions (also closures and recursion)
-
-Features in progress (and TODOs):
